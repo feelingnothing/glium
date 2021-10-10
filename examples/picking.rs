@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 
-#[allow(unused_imports)]
 use glium::{glutin, Surface};
 
 mod support;
@@ -16,10 +15,10 @@ implement_vertex!(PerInstance, id, w_position, color);
 
 fn main() {
     // building the display, ie. the main object
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new().with_depth_buffer(24);
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
+    let mut events_loop = glutin::EventsLoop::new();
+    let window = glutin::WindowBuilder::new();
+    let context = glutin::ContextBuilder::new().with_depth_buffer(24);
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     // building the vertex and index buffers
     let vertex_buffer = support::load_wavefront(&display, include_bytes!("support/teapot.obj"));
@@ -102,7 +101,7 @@ fn main() {
     ).unwrap();
 
     let mut camera = support::camera::CameraState::new();
-    camera.set_position((0.0, 0.0, -1.5));
+    camera.set_position((0.0, 0.0, 1.5));
     camera.set_direction((0.0, 0.0, 1.0));
 
     //id's must be unique and != 0
@@ -122,7 +121,7 @@ fn main() {
     let mut cursor_position: Option<(i32, i32)> = None;
 
     // the main loop
-    support::start_loop(event_loop, move |events| {
+    support::start_loop(|| {
         camera.update();
 
 
@@ -209,7 +208,7 @@ fn main() {
         if let (Some(cursor), Some(&(ref picking_texture, _))) = (cursor_position, picking_attachments.as_ref()) {
             let read_target = glium::Rect {
                 left: (cursor.0 - 1) as u32,
-                bottom: picking_texture.get_height().unwrap().saturating_sub(std::cmp::max(cursor.1 - 1, 0) as u32),
+                bottom: picking_texture.get_height().unwrap() - std::cmp::max(cursor.1 - 1, 0) as u32,
                 width: 1,
                 height: 1,
             };
@@ -230,19 +229,18 @@ fn main() {
         let mut action = support::Action::Continue;
 
         // polling and handling the events received by the window
-        for event in events {
+        events_loop.poll_events(|event| {
             match event {
-                glutin::event::Event::WindowEvent { event, .. } => match event {
-                    glutin::event::WindowEvent::CloseRequested => action = support::Action::Stop,
-                    glutin::event::WindowEvent::CursorMoved { position, .. } => {
-                        let hidpi_factor = display.gl_window().window().hidpi_factor();
-                        cursor_position = Some(position.to_physical(hidpi_factor).into()); 
+                glutin::Event::WindowEvent { event, .. } => match event {
+                    glutin::WindowEvent::CloseRequested => action = support::Action::Stop,
+                    glutin::WindowEvent::CursorMoved { position, .. } => {
+                        cursor_position = Some(position.into());
                     }
                     ev => camera.process_input(&ev),
                 },
                 _ => (),
             }
-        };
+        });
 
         action
     });

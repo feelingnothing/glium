@@ -3,15 +3,14 @@ extern crate glium;
 
 mod support;
 
-#[allow(unused_imports)]
 use glium::{glutin, Surface};
 use glium::index::PrimitiveType;
 
 fn main() {
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
+    let mut events_loop = glutin::EventsLoop::new();
+    let window = glutin::WindowBuilder::new();
+    let context = glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     // building the vertex buffer, which contains all the vertices that we will draw
     let vertex_buffer = {
@@ -126,7 +125,7 @@ fn main() {
     //
     // In this case we use a closure for simplicity, however keep in mind that most serious
     // applications should probably use a function that takes the resources as an argument.
-    let draw = move || {
+    let draw = || {
         // building the uniforms
         let uniforms = uniform! {
             matrix: [
@@ -148,19 +147,17 @@ fn main() {
     draw();
 
     // the main loop
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = match event {
-            glutin::event::Event::WindowEvent { event, .. } => match event {
+    events_loop.run_forever(|event| {
+        match event {
+            glutin::Event::WindowEvent { event, .. } => match event {
                 // Break from the main loop when the window is closed.
-                glutin::event::WindowEvent::CloseRequested => glutin::event_loop::ControlFlow::Exit,
+                glutin::WindowEvent::CloseRequested => return glutin::ControlFlow::Break,
                 // Redraw the triangle when the window is resized.
-                glutin::event::WindowEvent::Resized(..) => {
-                    draw();
-                    glutin::event_loop::ControlFlow::Poll
-                },
-                _ => glutin::event_loop::ControlFlow::Poll,
+                glutin::WindowEvent::Resized(..) => draw(),
+                _ => (),
             },
-            _ => glutin::event_loop::ControlFlow::Poll,
-        };
+            _ => (),
+        }
+        glutin::ControlFlow::Continue
     });
 }

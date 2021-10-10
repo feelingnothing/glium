@@ -35,7 +35,6 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::ops::Range;
-use std::ffi::c_void;
 
 use ops;
 use fbo;
@@ -169,11 +168,11 @@ pub fn new_texture<'a, F: ?Sized, P>(facade: &F, format: TextureFormatRequest,
     let should_generate_mipmaps = mipmaps.should_generate();
     let texture_levels = mipmaps.num_levels(width, height, depth) as gl::types::GLsizei;
 
-    let teximg_internal_format = image_format::format_request_to_glenum(facade.get_context(), format, image_format::RequestType::TexImage(data.as_ref().map(|&(c, _)| c)))?;
+    let teximg_internal_format = try!(image_format::format_request_to_glenum(facade.get_context(), format, image_format::RequestType::TexImage(data.as_ref().map(|&(c, _)| c))));
     let storage_internal_format = image_format::format_request_to_glenum(facade.get_context(), format, image_format::RequestType::TexStorage).ok();
 
     let (client_format, client_type) = match (&data, format) {
-        (&Some((client_format, _)), f) => image_format::client_format_to_glenum(facade.get_context(), client_format, f, false)?,
+        (&Some((client_format, _)), f) => try!(image_format::client_format_to_glenum(facade.get_context(), client_format, f, false)),
         (&None, TextureFormatRequest::AnyDepth) => (gl::DEPTH_COMPONENT, gl::FLOAT),
         (&None, TextureFormatRequest::Specific(TextureFormat::DepthFormat(_))) => (gl::DEPTH_COMPONENT, gl::FLOAT),
         (&None, TextureFormatRequest::AnyDepthStencil) => (gl::DEPTH_STENCIL, gl::UNSIGNED_INT_24_8),
@@ -203,7 +202,7 @@ pub fn new_texture<'a, F: ?Sized, P>(facade: &F, format: TextureFormatRequest,
         let has_mipmaps = texture_levels > 1;
         let data = data;
         let data_raw = if let Some((_, ref data)) = data {
-            data.as_ptr() as *const c_void
+            data.as_ptr() as *const _
         } else {
             ptr::null()
         };
@@ -215,7 +214,7 @@ pub fn new_texture<'a, F: ?Sized, P>(facade: &F, format: TextureFormatRequest,
 
         BufferAny::unbind_pixel_unpack(&mut ctxt);
 
-        let id: gl::types::GLuint = 0;
+        let id: gl::types::GLuint = mem::uninitialized();
         ctxt.gl.GenTextures(1, mem::transmute(&id));
 
         {
@@ -652,9 +651,9 @@ impl TextureAny {
     /// Determines the number of depth and stencil bits in the format of this texture.
     pub fn get_depth_stencil_bits(&self) -> (u16, u16) {
         unsafe {
-            let ctxt = self.context.make_current();
-            let mut depth_bits: gl::types::GLint = 0;
-            let mut stencil_bits: gl::types::GLint = 0;
+            let mut ctxt = self.context.make_current();
+            let mut depth_bits: gl::types::GLint = mem::uninitialized();
+            let mut stencil_bits: gl::types::GLint = mem::uninitialized();
             // FIXME: GL version considerations
             ctxt.gl.GetTextureLevelParameteriv(self.id, 0, gl::TEXTURE_DEPTH_SIZE, &mut depth_bits);
             ctxt.gl.GetTextureLevelParameteriv(self.id, 0, gl::TEXTURE_STENCIL_SIZE, &mut stencil_bits);
@@ -1170,10 +1169,10 @@ impl<'t> TextureMipmapExt for TextureAnyMipmap<'t> {
             panic!("Texture data size mismatch");
         }
 
-        let (client_format, client_type) = image_format::client_format_to_glenum(&self.texture.context,
-                                                                                 format,
-                                                                                 self.texture.requested_format, false)
-                                                                                 .map_err(|_| ())?;
+        let (client_format, client_type) = try!(image_format::client_format_to_glenum(&self.texture.context,
+                                                                                      format,
+                                                                                      self.texture.requested_format, false)
+                                                                                      .map_err(|_| ()));
 
         let mut ctxt = self.texture.context.make_current();
 
@@ -1240,13 +1239,13 @@ impl<'t> TextureMipmapExt for TextureAnyMipmap<'t> {
         unsafe {
             let bind_point = texture.bind_to_current(&mut ctxt);
 
-            let mut is_compressed = 0;
+            let mut is_compressed = mem::uninitialized();
             ctxt.gl.GetTexLevelParameteriv(bind_point, level, gl::TEXTURE_COMPRESSED, &mut is_compressed);
             if is_compressed != 0 {
 
-                let mut buffer_size = 0;
+                let mut buffer_size = mem::uninitialized();
                 ctxt.gl.GetTexLevelParameteriv(bind_point, level, gl::TEXTURE_COMPRESSED_IMAGE_SIZE, &mut buffer_size);
-                let mut internal_format = 0;
+                let mut internal_format = mem::uninitialized();
                 ctxt.gl.GetTexLevelParameteriv(bind_point, level, gl::TEXTURE_INTERNAL_FORMAT, &mut internal_format);
 
                 match ClientFormatAny::from_internal_compressed_format(internal_format as gl::types::GLenum) {

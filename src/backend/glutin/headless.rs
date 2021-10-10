@@ -5,21 +5,20 @@ use debug;
 use context;
 use backend::{self, Backend};
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::ops::Deref;
 use std::os::raw::c_void;
 use super::glutin;
-use super::glutin::{PossiblyCurrent as Pc, ContextCurrentState};
-use takeable_option::Takeable;
+use super::glutin::GlContext;
+
 
 /// A headless glutin context.
 pub struct Headless {
     context: Rc<context::Context>,
-    glutin: Rc<RefCell<Takeable<glutin::Context<Pc>>>>,
+    glutin: Rc<glutin::Context>,
 }
 
 /// An implementation of the `Backend` trait for a glutin headless context.
-pub struct GlutinBackend(Rc<RefCell<Takeable<glutin::Context<Pc>>>>);
+pub struct GlutinBackend(Rc<glutin::Context>);
 
 impl Deref for Headless {
     type Target = context::Context;
@@ -29,8 +28,8 @@ impl Deref for Headless {
 }
 
 impl Deref for GlutinBackend {
-    type Target = Rc<RefCell<Takeable<glutin::Context<Pc>>>>;
-    fn deref(&self) -> &Rc<RefCell<Takeable<glutin::Context<Pc>>>> {
+    type Target = glutin::Context;
+    fn deref(&self) -> &glutin::Context {
         &self.0
     }
 }
@@ -43,7 +42,7 @@ unsafe impl Backend for GlutinBackend {
 
     #[inline]
     unsafe fn get_proc_address(&self, symbol: &str) -> *const c_void {
-        self.0.borrow().get_proc_address(symbol) as *const _
+        self.0.get_proc_address(symbol) as *const _
     }
 
     #[inline]
@@ -53,15 +52,12 @@ unsafe impl Backend for GlutinBackend {
 
     #[inline]
     fn is_current(&self) -> bool {
-        self.0.borrow().is_current()
+        self.0.is_current()
     }
 
     #[inline]
     unsafe fn make_current(&self) {
-        let mut gl_window_takeable = self.0.borrow_mut();
-        let gl_window = Takeable::take(&mut gl_window_takeable);
-        let gl_window_new = gl_window.make_current().unwrap();
-        Takeable::insert(&mut gl_window_takeable, gl_window_new);
+        self.0.make_current().unwrap();
     }
 }
 
@@ -77,7 +73,7 @@ impl Headless {
     ///
     /// Performs a compatibility check to make sure that all core elements of glium are supported
     /// by the implementation.
-    pub fn new<T: ContextCurrentState>(context: glutin::Context<T>) -> Result<Self, IncompatibleOpenGl> {
+    pub fn new(context: glutin::Context) -> Result<Self, IncompatibleOpenGl> {
         Self::with_debug(context, Default::default())
     }
 
@@ -85,38 +81,35 @@ impl Headless {
     ///
     /// This function does the same as `build_glium`, except that the resulting context
     /// will assume that the current OpenGL context will never change.
-    pub unsafe fn unchecked<T: ContextCurrentState>(context: glutin::Context<T>) -> Result<Self, IncompatibleOpenGl> {
+    pub unsafe fn unchecked(context: glutin::Context) -> Result<Self, IncompatibleOpenGl> {
         Self::unchecked_with_debug(context, Default::default())
     }
 
     /// The same as the `new` constructor, but allows for specifying debug callback behaviour.
-    pub fn with_debug<T: ContextCurrentState>(context: glutin::Context<T>, debug: debug::DebugCallbackBehavior)
+    pub fn with_debug(context: glutin::Context, debug: debug::DebugCallbackBehavior)
         -> Result<Self, IncompatibleOpenGl>
     {
         Self::new_inner(context, debug, true)
     }
 
     /// The same as the `unchecked` constructor, but allows for specifying debug callback behaviour.
-    pub unsafe fn unchecked_with_debug<T: ContextCurrentState>(
-        context: glutin::Context<T>,
+    pub unsafe fn unchecked_with_debug(
+        context: glutin::Context,
         debug: debug::DebugCallbackBehavior,
     ) -> Result<Self, IncompatibleOpenGl>
     {
         Self::new_inner(context, debug, false)
     }
 
-    fn new_inner<T: ContextCurrentState>(
-        context: glutin::Context<T>,
+    fn new_inner(
+        context: glutin::Context,
         debug: debug::DebugCallbackBehavior,
         checked: bool,
     ) -> Result<Self, IncompatibleOpenGl>
     {
-        let context = unsafe {
-            context.treat_as_current()
-        };
-        let glutin_context = Rc::new(RefCell::new(Takeable::new(context)));
+        let glutin_context = Rc::new(context);
         let glutin_backend = GlutinBackend(glutin_context.clone());
-        let context = unsafe { context::Context::new(glutin_backend, checked, debug) }?;
+        let context = try!(unsafe { context::Context::new(glutin_backend, checked, debug) });
         Ok(Headless { context: context, glutin: glutin_context })
     }
 

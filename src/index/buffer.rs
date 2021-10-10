@@ -47,7 +47,7 @@ impl Error for CreationError {
         }
     }
 
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+    fn cause(&self) -> Option<&Error> {
         use self::CreationError::*;
         match *self {
             BufferCreationError(ref err) => Some(err),
@@ -121,7 +121,7 @@ impl<T> IndexBuffer<T> where T: Index {
         }
 
         Ok(IndexBuffer {
-            buffer: Buffer::new(facade, data, BufferType::ElementArrayBuffer, mode)?.into(),
+            buffer: try!(Buffer::new(facade, data, BufferType::ElementArrayBuffer, mode)).into(),
             primitives: prim,
         })
     }
@@ -176,8 +176,8 @@ impl<T> IndexBuffer<T> where T: Index {
         }
 
         Ok(IndexBuffer {
-            buffer: Buffer::empty_array(facade, BufferType::ElementArrayBuffer, len,
-                                                 mode)?.into(),
+            buffer: try!(Buffer::empty_array(facade, BufferType::ElementArrayBuffer, len,
+                                                 mode)).into(),
             primitives: prim,
         })
     }

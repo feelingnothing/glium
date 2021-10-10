@@ -77,10 +77,6 @@ macro_rules! uniform {
 ///
 /// The parameters must be the name of the struct and the names of its fields.
 ///
-/// ## Safety
-///
-/// You must not use this macro on any struct with fields that cannot be zeroed.
-///
 /// ## Example
 ///
 /// ```
@@ -111,17 +107,26 @@ macro_rules! implement_vertex {
                     $(
                         (
                             Cow::Borrowed(stringify!($field_name)),
-                            $crate::__glium_offset_of!($struct_name, $field_name),
                             {
-                                // Obtain the type of the $field_name field of $struct_name and
-                                // call get_type on it.
-                                fn attr_type_of_val<T: $crate::vertex::Attribute>(_: Option<&T>)
+                                // calculate the offset of the struct fields
+                                let dummy: $struct_name = unsafe { ::std::mem::uninitialized() };
+                                let offset: usize = {
+                                    let dummy_ref = &dummy;
+                                    let field_ref = &dummy.$field_name;
+                                    (field_ref as *const _ as usize) - (dummy_ref as *const _ as usize)
+                                };
+                                // NOTE: `glium::vertex::Vertex` requires `$struct_name` to have `Copy` trait
+                                // `Copy` excludes `Drop`, so we don't have to `std::mem::forget(dummy)`
+                                offset
+                            },
+                            {
+                                fn attr_type_of_val<T: $crate::vertex::Attribute>(_: &T)
                                     -> $crate::vertex::AttributeType
                                 {
                                     <T as $crate::vertex::Attribute>::get_type()
                                 }
-                                let field_option = None::<&$struct_name>.map(|v| &v.$field_name);
-                                attr_type_of_val(field_option)
+                                let dummy: &$struct_name = unsafe { ::std::mem::transmute(0usize) };
+                                attr_type_of_val(&dummy.$field_name)
                             },
                             false
                         )
@@ -143,17 +148,20 @@ macro_rules! implement_vertex {
                     $(
                         (
                             Cow::Borrowed(stringify!($field_name)),
-                            $crate::__glium_offset_of!($struct_name, $field_name),
                             {
-                                // Obtain the type of the $field_name field of $struct_name and
-                                // call get_type on it.
-                                fn attr_type_of_val<T: $crate::vertex::Attribute>(_: Option<&T>)
+                                let dummy: &$struct_name = unsafe { ::std::mem::transmute(0usize) };
+                                let dummy_field = &dummy.$field_name;
+                                let dummy_field: usize = unsafe { ::std::mem::transmute(dummy_field) };
+                                dummy_field
+                            },
+                            {
+                                fn attr_type_of_val<T: $crate::vertex::Attribute>(_: &T)
                                     -> $crate::vertex::AttributeType
                                 {
                                     <T as $crate::vertex::Attribute>::get_type()
                                 }
-                                let field_option = None::<&$struct_name>.map(|v| &v.$field_name);
-                                attr_type_of_val(field_option)
+                                let dummy: &$struct_name = unsafe { ::std::mem::transmute(0usize) };
+                                attr_type_of_val(&dummy.$field_name)
                             },
                             {
                                 $should_normalize
@@ -213,7 +221,7 @@ macro_rules! implement_buffer_content {
                     let storage = storage.into_boxed_slice();
                     let mut storage: Box<$struct_name<$($gs)*>> = unsafe { mem::transmute(storage) };
 
-                    f(&mut storage)?;
+                    try!(f(&mut storage));
                     Ok(storage)
                 }
 
@@ -373,13 +381,16 @@ macro_rules! implement_uniform_block {
                 }
 
                 fn build_layout(base_offset: usize) -> $crate::program::BlockLayout {
+                    use std::mem;
                     use $crate::program::BlockLayout;
 
-                    fn layout_from_ty<T: $crate::uniforms::UniformBlock + ?Sized>(_: Option<&T>, base_offset: usize)
+                    fn layout_from_ty<T: $crate::uniforms::UniformBlock + ?Sized>(_: &T, base_offset: usize)
                                                                          -> BlockLayout
                     {
                         <T as $crate::uniforms::UniformBlock>::build_layout(base_offset)
                     }
+
+                    let dummy: &$struct_name = unsafe { mem::zeroed() };
 
                     BlockLayout::Struct {
                         members: vec![
@@ -387,9 +398,11 @@ macro_rules! implement_uniform_block {
                                 (
                                     stringify!($field_name).to_owned(),
                                     {
-                                        let offset = $crate::__glium_offset_of!($struct_name, $field_name);
-                                        let field_option = None::<&$struct_name>.map(|v| &v.$field_name);
-                                        layout_from_ty(field_option, offset + base_offset)
+                                        let offset = {
+                                            let dummy_field: *const _ = &dummy.$field_name;
+                                            dummy_field as *const () as usize
+                                        };
+                                        layout_from_ty(&dummy.$field_name, offset + base_offset)
                                     }
                                 ),
                             )+

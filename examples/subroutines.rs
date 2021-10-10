@@ -3,17 +3,16 @@ extern crate glium;
 
 mod support;
 
-#[allow(unused_imports)]
 use glium::{glutin, Surface};
 use glium::index::PrimitiveType;
 use glium::program::ShaderStage;
 
 fn main() {
     // building the display, ie. the main object
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
+    let mut events_loop = glutin::EventsLoop::new();
+    let window = glutin::WindowBuilder::new();
+    let context = glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     // building the vertex buffer, which contains all the vertices that we will draw
     let vertex_buffer = {
@@ -89,7 +88,7 @@ fn main() {
 
     let mut i = 0;
     // the main loop
-    support::start_loop(event_loop, move |events| {
+    support::start_loop(|| {
         if i == 120 { i = 0; }
         let subroutine = if i % 120 < 40 {
             "ColorYellow"
@@ -118,15 +117,15 @@ fn main() {
 
         let mut action = support::Action::Continue;
 
-        for event in events {
+        events_loop.poll_events(|event| {
             match event {
-                glutin::event::Event::WindowEvent { event, .. } => match event {
-                    glutin::event::WindowEvent::CloseRequested => action = support::Action::Stop,
+                glutin::Event::WindowEvent { event, .. } => match event {
+                    glutin::WindowEvent::CloseRequested => action = support::Action::Stop,
                     _ => ()
                 },
                 _ => (),
             }
-        };
+        });
         i += 1;
 
         action

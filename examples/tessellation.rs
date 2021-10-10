@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 
-#[allow(unused_imports)]
 use glium::{glutin, Surface};
 use glium::index::PrimitiveType;
 
@@ -9,10 +8,10 @@ mod support;
 
 fn main() {
     // building the display, ie. the main object
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
+    let mut events_loop = glutin::EventsLoop::new();
+    let window = glutin::WindowBuilder::new();
+    let context = glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     // building the vertex buffer, which contains all the vertices that we will draw
     let vertex_buffer = {
@@ -129,7 +128,7 @@ fn main() {
     println!("The current tessellation level is {} ; use the Up and Down keys to change it", tess_level);
     
     // the main loop
-    support::start_loop(event_loop, move |events| {
+    support::start_loop(|| {
         // building the uniforms
         let uniforms = uniform! {
             matrix: [
@@ -150,17 +149,17 @@ fn main() {
         let mut action = support::Action::Continue;
 
         // polling and handling the events received by the window
-        for event in events {
+        events_loop.poll_events(|event| {
             match event {
-                glutin::event::Event::WindowEvent { event, .. } => match event {
-                    glutin::event::WindowEvent::CloseRequested => action = support::Action::Stop,
-                    glutin::event::WindowEvent::KeyboardInput { input, .. } => match input.state {
-                        glutin::event::ElementState::Pressed => match input.virtual_keycode {
-                            Some(glutin::event::VirtualKeyCode::Up) => {
+                glutin::Event::WindowEvent { event, .. } => match event {
+                    glutin::WindowEvent::CloseRequested => action = support::Action::Stop,
+                    glutin::WindowEvent::KeyboardInput { input, .. } => match input.state {
+                        glutin::ElementState::Pressed => match input.virtual_keycode {
+                            Some(glutin::VirtualKeyCode::Up) => {
                                 tess_level += 1;
                                 println!("New tessellation level: {}", tess_level);
                             },
-                            Some(glutin::event::VirtualKeyCode::Down) => {
+                            Some(glutin::VirtualKeyCode::Down) => {
                                 if tess_level >= 2 {
                                     tess_level -= 1;
                                     println!("New tessellation level: {}", tess_level);
@@ -174,7 +173,7 @@ fn main() {
                 },
                 _ => (),
             }
-        };
+        });
 
         action
     });

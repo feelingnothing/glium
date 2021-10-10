@@ -3,17 +3,16 @@ extern crate image;
 extern crate glium;
 
 use std::io::Cursor;
-#[allow(unused_imports)]
 use glium::{glutin, Surface};
 
 mod support;
 
 fn main() {
     // building the display, ie. the main object
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
+    let mut events_loop = glutin::EventsLoop::new();
+    let window = glutin::WindowBuilder::new();
+    let context = glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     let image = image::load(Cursor::new(&include_bytes!("../tests/fixture/opengl.png")[..]),
                             image::PNG).unwrap().to_rgba();
@@ -189,7 +188,7 @@ fn main() {
     let camera = support::camera::CameraState::new();
 
     // the main loop
-    support::start_loop(event_loop, move |events| {
+    support::start_loop(|| {
         // building the uniforms
         let uniforms = uniform! {
             inner_level: 64.0f32,
@@ -220,13 +219,13 @@ fn main() {
         let mut action = support::Action::Continue;
 
         // polling and handling the events received by the window
-        for event in events {
+        events_loop.poll_events(|event| {
             match event {
-                glutin::event::Event::WindowEvent { event: glutin::event::WindowEvent::CloseRequested, .. } =>
+                glutin::Event::WindowEvent { event: glutin::WindowEvent::CloseRequested, .. } =>
                     action = support::Action::Stop,
                 _ => ()
             }
-        };
+        });
 
         action
     });
